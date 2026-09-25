@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EcoClick — Pontos de coleta</title>
+
+  <!-- Leaflet: mapa interativo -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  />
+
+  <style>
+    :root {
+      --ec-navy: #1D2E4A;
+      --ec-blue: #2D5FA4;
+      --ec-green: #4A8476;
+      --ec-mint: #84CFB0;
+      --ec-pale: #EEFCFF;
+      --ec-white: #FFFFFF;
+      --ec-text: #24364F;
+      --ec-muted: #738093;
+      --ec-line: rgba(29, 46, 74, .10);
+      --ec-shadow: 0 12px 35px rgba(29, 46, 74, .08);
+      --ec-radius: 22px;
+    }
+
+    #ecoclick-map {
+      font-family: "Times New Roman", Times, serif;
+      color: var(--ec-text);
+      width: 100%;
+      padding: 8px 0;
+    }
+
+    #ecoclick-map * {
+      box-sizing: border-box;
+    }
+
+    .ecoclick-map-shell {
+      width: min(1180px, 100%);
+      margin: 0 auto;
+    }
+
+    .ecoclick-map-card {
+      background: rgba(255,255,255,.76);
+      border: 1px solid var(--ec-line);
+      border-radius: var(--ec-radius);
+      box-shadow: var(--ec-shadow);
+      padding: clamp(18px, 3vw, 30px);
+    }
+
+    .ecoclick-map-heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+
+    .ecoclick-map-kicker {
+      margin: 0 0 5px;
+      color: var(--ec-green);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+
+    .ecoclick-map-heading h2 {
+      margin: 0;
+      color: var(--ec-navy);
+      font-size: clamp(30px, 4vw, 43px);
+      line-height: 1;
+      font-weight: 700;
+      letter-spacing: -.6px;
+    }
+
+    .ecoclick-map-heading p {
+      max-width: 510px;
+      margin: 7px 0 0;
+      color: var(--ec-muted);
+      font-size: 16px;
+      line-height: 1.45;
+    }
+
+    .ecoclick-map-toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 210px;
+      gap: 10px;
+      margin-bottom: 13px;
+    }
+
+    .ecoclick-search-box,
+    .ecoclick-filter-box {
+      position: relative;
+    }
+
+    .ecoclick-map-toolbar input,
+    .ecoclick-map-toolbar select {
+      width: 100%;
+      min-height: 48px;
+      border: 1px solid var(--ec-line);
+      border-radius: 999px;
+      background: var(--ec-white);
+      color: var(--ec-navy);
+      padding: 10px 16px;
+      font: inherit;
+      font-size: 16px;
+      outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+
+    .ecoclick-map-toolbar input {
+      padding-left: 42px;
+    }
+
+    .ecoclick-map-toolbar input:focus,
+    .ecoclick-map-toolbar select:focus {
+      border-color: rgba(45,95,164,.40);
+      box-shadow: 0 0 0 4px rgba(132,207,176,.20);
+    }
+
+    .ecoclick-search-icon {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--ec-green);
+      font-size: 18px;
+      pointer-events: none;
+    }
+
+    .ecoclick-map-wrap {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--ec-line);
+      border-radius: 18px;
+      background: var(--ec-pale);
+    }
+
+    #ecoclick-leaflet-map {
+      width: 100%;
+      height: 600px;
+      min-height: 420px;
+    }
+
+    .ecoclick-map-status {
+      display: none;
+      margin: 0 0 13px;
+      padding: 10px 13px;
+      border-radius: 13px;
+      background: rgba(132,207,176,.16);
+      color: var(--ec-green);
+      border: 1px solid rgba(74,132,118,.12);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .ecoclick-map-status.is-visible {
+      display: block;
+    }
+
+    .ecoclick-map-legend {
+      position: absolute;
+      z-index: 500;
+      left: 14px;
+      bottom: 14px;
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      max-width: calc(100% - 28px);
+      padding: 9px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,.95);
+      border: 1px solid var(--ec-line);
+      font-size: 14px;
+      box-shadow: 0 4px 16px rgba(29,46,74,.10);
+    }
+
+    .ecoclick-legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .ecoclick-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .ecoclick-dot-active { background: var(--ec-green); }
+    .ecoclick-dot-selected { background: var(--ec-blue); }
+
+    .ecoclick-info {
+      position: absolute;
+      z-index: 1000;
+      top: 14px;
+      right: 14px;
+      width: min(365px, calc(100% - 28px));
+      max-height: calc(100% - 28px);
+      overflow: auto;
+      display: none;
+      padding: 21px;
+      border-radius: 18px;
+      background: rgba(255,255,255,.98);
+      border: 1px solid var(--ec-line);
+      box-shadow: 0 14px 35px rgba(29,46,74,.18);
+    }
+
+    .ecoclick-info.is-open {
+      display: block;
+      animation: ecoclick-panel-in .18s ease-out;
+    }
+
+    @keyframes ecoclick-panel-in {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .ecoclick-info-close {
+      float: right;
+      width: 40px;
+      height: 40px;
+      border: 0;
+      border-radius: 50%;
+      background: var(--ec-pale);
+      color: var(--ec-navy);
+      font: 700 22px/1 "Times New Roman", Times, serif;
+      cursor: pointer;
+    }
+
+    .ecoclick-info-close:hover {
+      background: rgba(132,207,176,.30);
+    }
+
+    .ecoclick-info h3 {
+      margin: 4px 48px 5px 0;
+      color: var(--ec-navy);
+      font-size: 24px;
+      line-height: 1.08;
+    }
+
+    .ecoclick-info .bairro {
+      color: var(--ec-green);
+      margin: 0 0 14px;
+      font-size: 15px;
+    }
+
+    .ecoclick-info dl {
+      margin: 0;
+    }
+
+    .ecoclick-info dt {
+      margin-top: 12px;
+      color: var(--ec-navy);
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .ecoclick-info dd {
+      margin: 3px 0 0;
+      color: #56677A;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+
+    .ecoclick-info .ecoclick-status {
+      display: inline-block;
+      margin-top: 15px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(132,207,176,.23);
+      color: var(--ec-green);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .ecoclick-note {
+      margin: 11px 0 0;
+      color: var(--ec-muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .ecoclick-note code {
+      color: var(--ec-blue);
+      font-family: Consolas, monospace;
+      font-size: .92em;
+    }
+
+    .ecoclick-marker {
+      width: 34px;
+      height: 34px;
+      border-radius: 50% 50% 50% 0;
+      background: var(--ec-blue);
+      border: 3px solid white;
+      box-shadow: 0 3px 10px rgba(29,46,74,.28);
+      transform: rotate(-45deg);
+      display: grid;
+      place-items: center;
+    }
+
+    .ecoclick-marker span {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--ec-mint);
+      transform: rotate(45deg);
+    }
+
+    .leaflet-control-zoom a {
+      color: var(--ec-navy) !important;
+      border-color: var(--ec-line) !important;
+      font-family: "Times New Roman", Times, serif;
+    }
+
+    .leaflet-control-zoom a:hover {
+      background: var(--ec-pale) !important;
+    }
+
+    .leaflet-control-attribution {
+      font-size: 10px;
+    }
+
+    @media (max-width: 760px) {
+      .ecoclick-map-heading {
+        display: block;
+      }
+
+      .ecoclick-map-toolbar {
+        grid-template-columns: 1fr;
+      }
+
+      #ecoclick-leaflet-map {
+        height: 520px;
+      }
+
+      .ecoclick-map-card {
+        padding: 18px;
+        border-radius: 18px;
+      }
+
+      .ecoclick-info {
+        top: auto;
+        right: 10px;
+        bottom: 10px;
+        width: calc(100% - 20px);
+        max-height: 58%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <!--
+    COLE ESTA SEÇÃO NO LOCAL DO SITE ONDE O MAPA DEVE APARECER.
+    Se o seu site já possui <body>, não duplique o <body>/<head>; use apenas
+    o conteúdo de #ecoclick-map + os estilos/scripts.
+  -->
+
+  <section id="ecoclick-map" aria-labelledby="ecoclick-map-title">
+    <div class="ecoclick-map-shell">
+      <div class="ecoclick-map-card">
+        <div class="ecoclick-map-heading">
+          <div>
+            <p class="ecoclick-map-kicker">EcoClick · Salvador</p>
+            <h2 id="ecoclick-map-title">Pontos de coleta</h2>
+            <p>Encontre um local próximo para encaminhar seus resíduos eletrônicos.</p>
+          </div>
+        </div>
+
+        <div id="ecoclick-map-status" class="ecoclick-map-status" aria-live="polite"></div>
+
+        <div class="ecoclick-map-toolbar">
+          <div class="ecoclick-search-box">
+            <span class="ecoclick-search-icon" aria-hidden="true">⌕</span>
+            <input
+              id="ecoclick-search"
+              type="search"
+              placeholder="Buscar por nome ou bairro..."
+              aria-label="Buscar ponto de coleta ou bairro"
+            />
+          </div>
+          <div class="ecoclick-filter-box">
+            <select id="ecoclick-filter" aria-label="Filtrar pontos">
+          <option value="todos">Todos os pontos</option>
+          <option value="eletronicos">Lixo eletrônico</option>
+          <option value="coleta">Coleta/reciclagem</option>
+        </select>
+      </div>
+
+      <div class="ecoclick-map-wrap">
+        <div id="ecoclick-leaflet-map" aria-label="Mapa interativo de pontos de coleta em Salvador"></div>
+
+        <div class="ecoclick-map-legend" aria-label="Legenda do mapa">
+          <span class="ecoclick-legend-item">
+            <i class="ecoclick-dot ecoclick-dot-active"></i> ponto cadastrado
+          </span>
+          <span class="ecoclick-legend-item">
+            <i class="ecoclick-dot ecoclick-dot-selected"></i> ponto selecionado
+          </span>
+        </div>
+
+        <aside id="ecoclick-info" class="ecoclick-info" aria-live="polite" aria-hidden="true">
+          <button class="ecoclick-info-close" id="ecoclick-close" type="button" aria-label="Fechar informações">×</button>
+          <h3 id="ecoclick-info-name">Selecione um ponto</h3>
+          <p class="bairro" id="ecoclick-info-neighborhood"></p>
+          <dl>
+            <dt>Endereço</dt>
+            <dd id="ecoclick-info-address"></dd>
+
+            <dt>Horário de funcionamento</dt>
+            <dd id="ecoclick-info-hours"></dd>
+
+            <dt>O que recebe</dt>
+            <dd id="ecoclick-info-types"></dd>
+
+            <dt>Tipo de serviço</dt>
+            <dd id="ecoclick-info-service"></dd>
+          </dl>
+          <span class="ecoclick-status">Ativo no cadastro</span>
+          <p class="ecoclick-note">
+            Os dados de aceitação de materiais devem ser confirmados pelo EcoClick antes da publicação
+            definitiva, pois podem variar entre os estabelecimentos.
+          </p>
+        </aside>
+      </div>
+
+        
+      </div>
+    </div>
+  </section>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    crossorigin="">
+  </script>
+
+  <script>
+    (() => {
+      "use strict";
+
+      /*
+       * DADOS DO ECOCLICK
+       * Para adicionar/remover pontos, altere somente este array.
+       *
+       * IMPORTANTE:
+       * As coordenadas abaixo são aproximações por bairro para a DEMONSTRAÇÃO.
+       * Use coordenadas exatas verificadas pelo grupo antes da publicação.
+       */
+      const pontos = [
+        {
+          id: 1,
+          nome: "LIXO ELETRONICO MRX COLETAMOS GRATUITAMENTE",
+          bairro: "Boca do Rio",
+          endereco: "R. Jaime Loureiro, 87 - Boca do Rio, Salvador - BA",
+          lat: -12.9830,
+          lng: -38.4450,
+          horario: "Seg. a sex.: 08h–18h | Sáb.: 08h–12h",
+          tipos: "Resíduos eletroeletrônicos. Confirmar itens específicos antes da entrega.",
+          servico: "Coleta / reciclagem de eletrônicos",
+          categoria: "eletronicos"
+        },
+        {
+          id: 2,
+          nome: "Recicle Logística Reversa de Eletrônicos",
+          bairro: "Amaralina",
+          endereco: "R. Guanabara, 03 - Amaralina, Salvador - BA",
+          lat: -13.0075,
+          lng: -38.4630,
+          horario: "Seg. a sex.: 08h–18h | Sáb.: 08h–13h",
+          tipos: "Resíduos eletroeletrônicos. Confirmar itens específicos antes da entrega.",
+          servico: "Logística reversa / reciclagem",
+          categoria: "eletronicos"
+        },
+        {
+          id: 3,
+          nome: "Recicla Salvador",
+          bairro: "Matatu",
+          endereco: "R. Édson Saldanha, 210A - Matatu, Salvador - BA",
+          lat: -12.9990,
+          lng: -38.4940,
+          horario: "Seg. a sex.: 08h–12h e 13h–17h48",
+          tipos: "Resíduos para reciclagem. Confirmar a aceitação de eletrônicos.",
+          servico: "Centro de reciclagem",
+          categoria: "coleta"
+        },
+        {
+          id: 4,
+          nome: "JJ Lixo Eletrônico",
+          bairro: "Nazaré",
+          endereco: "R. Jogo do Carneiro, 54 - Nazaré, Salvador - BA",
+          lat: -12.9765,
+          lng: -38.5050,
+          horario: "Seg. a sex.: 08h–17h30",
+          tipos: "Resíduos eletroeletrônicos. Confirmar itens específicos antes da entrega.",
+          servico: "Centro de reciclagem",
+          categoria: "eletronicos"
+        },
+        {
+          id: 5,
+          nome: "Big Logística Reversa de Eletrônicos",
+          bairro: "Nordeste de Amaralina",
+          endereco: "R. do Norte, 64 - Nordeste do Amaralina, Salvador - BA",
+          lat: -13.0030,
+          lng: -38.4600,
+          horario: "Seg. a sex.: 08h–17h30 | Sáb.: 08h–12h",
+          tipos: "Resíduos eletroeletrônicos. Confirmar itens específicos antes da entrega.",
+          servico: "Logística reversa / reciclagem",
+          categoria: "eletronicos"
+        },
+        {
+          id: 6,
+          nome: "Resíduos Log Lixo Eletrônico",
+          bairro: "Narandiba",
+          endereco: "Av. Edgard Santos - Narandiba, Salvador - BA",
+          lat: -12.9735,
+          lng: -38.4545,
+          horario: "Seg. a sex.: 08h–17h",
+          tipos: "Resíduos eletroeletrônicos. Confirmar itens específicos antes da entrega.",
+          servico: "Centro de reciclagem",
+          categoria: "eletronicos"
+        },
+        {
+          id: 7,
+          nome: "Descarte Doação Coleta Sucata Eletrônica",
+          bairro: "Mussurunga",
+          endereco: "R. das Mangueiras de Mussurunga, 07 - Mussurunga 2, Salvador - BA",
+          lat: -12.9135,
+          lng: -38.3655,
+          horario: "Seg. a sex.: 09h–17h",
+          tipos: "Sucata eletrônica. Confirmar itens específicos antes da entrega.",
+          servico: "Coleta / reciclagem",
+          categoria: "eletronicos"
+        },
+        {
+          id: 8,
+          nome: "Salvador Reciclagem",
+          bairro: "Imbuí",
+          endereco: "Av. Jorge Amado, 40 - Imbuí, Salvador - BA",
+          lat: -12.9815,
+          lng: -38.4500,
+          horario: "Seg. a sex.: 08h–17h | Sáb.: 08h–17h",
+          tipos: "Materiais recicláveis. Confirmar a aceitação de eletrônicos.",
+          servico: "Centro de reciclagem",
+          categoria: "coleta"
+        },
+        {
+          id: 9,
+          nome: "Sucatex do Brasil",
+          bairro: "Calabetão",
+          endereco: "R. do Afeganistão, 10 - Calabetão, Salvador - BA",
+          lat: -12.9340,
+          lng: -38.4590,
+          horario: "Seg. a sex.: 08h–19h | Sáb.: 08h–19h",
+          tipos: "Equipamentos eletroeletrônicos, incluindo informática e eletrodomésticos, conforme a empresa.",
+          servico: "Logística reversa / gestão de resíduos",
+          categoria: "eletronicos"
+        }
+      ];
+
+      const map = L.map("ecoclick-leaflet-map", {
+        zoomControl: true,
+        scrollWheelZoom: true,
+        dragging: true,
+        doubleClickZoom: true,
+        touchZoom: true,
+        boxZoom: true,
+        keyboard: true
+      }).setView([-12.9714, -38.5014], 11);
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>'
+      }).addTo(map);
+
+      const markerLayer = L.layerGroup().addTo(map);
+      const markersById = new Map();
+
+      /*
+       * Centros aproximados de bairros usados para o fallback de busca.
+       * Se o usuário pesquisar um bairro sem ponto cadastrado, o sistema
+       * encontra o ponto de coleta mais próximo desse bairro.
+       *
+       * Para produção, vocês podem ampliar esta lista com os bairros
+       * atendidos pelo EcoClick ou trocar pelo banco de dados do projeto.
+       */
+      const bairrosSalvador = {
+        "amaralina": [-13.0075, -38.4630],
+        "boca do rio": [-12.9830, -38.4450],
+        "barra": [-13.0077, -38.5322],
+        "barra avenida": [-13.0077, -38.5322],
+        "brotas": [-12.9890, -38.4890],
+        "cabula": [-12.9505, -38.4740],
+        "calabeto": [-12.9340, -38.4590],
+        "calabetão": [-12.9340, -38.4590],
+        "caminho das árvores": [-12.9890, -38.4640],
+        "campo grande": [-12.9975, -38.5210],
+        "canela": [-13.0020, -38.5180],
+        "centro": [-12.9740, -38.5100],
+        "comércio": [-12.9725, -38.5120],
+        "federação": [-13.0000, -38.5160],
+        "graça": [-13.0000, -38.5260],
+        "imbuí": [-12.9815, -38.4500],
+        "itapuã": [-12.9470, -38.3680],
+        "itaigara": [-12.9950, -38.4700],
+        "matatu": [-12.9990, -38.4940],
+        "mussurunga": [-12.9135, -38.3655],
+        "nazaré": [-12.9765, -38.5050],
+        "narandiba": [-12.9735, -38.4545],
+        "nordeste de amaralina": [-13.0030, -38.4600],
+        "ondina": [-13.0055, -38.5230],
+        "paripe": [-12.7990, -38.4740],
+        "pituba": [-13.0000, -38.4660],
+        "rio vermelho": [-13.0100, -38.4880],
+        "são cristóvão": [-12.9180, -38.3520],
+        "stiep": [-12.9950, -38.4580],
+        "stella maris": [-12.9460, -38.3510],
+        "tororó": [-12.9860, -38.5140],
+        "vila laura": [-12.9870, -38.4820]
+      };
+
+      const normalizarTexto = (texto) =>
+        texto
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLocaleLowerCase("pt-BR")
+          .trim();
+
+      function distanciaKm(lat1, lng1, lat2, lng2) {
+        const R = 6371;
+        const rad = Math.PI / 180;
+        const dLat = (lat2 - lat1) * rad;
+        const dLng = (lng2 - lng1) * rad;
+        const a =
+          Math.sin(dLat / 2) ** 2 +
+          Math.cos(lat1 * rad) *
+          Math.cos(lat2 * rad) *
+          Math.sin(dLng / 2) ** 2;
+
+        return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      }
+
+      function pontoMaisProximo(lat, lng, candidatos = pontos) {
+        return candidatos
+          .map((ponto) => ({
+            ponto,
+            distancia: distanciaKm(lat, lng, ponto.lat, ponto.lng)
+          }))
+          .sort((a, b) => a.distancia - b.distancia)[0] || null;
+      }
+
+      function mostrarStatus(texto) {
+        const status = document.getElementById("ecoclick-map-status");
+        status.textContent = texto;
+        status.classList.add("is-visible");
+      }
+
+      function limparStatus() {
+        const status = document.getElementById("ecoclick-map-status");
+        status.textContent = "";
+        status.classList.remove("is-visible");
+      }
+
+      const markerIcon = L.divIcon({
+        className: "",
+        html: '<div class="ecoclick-marker"><span></span></div>',
+        iconSize: [34, 34],
+        iconAnchor: [17, 34],
+        popupAnchor: [0, -34]
+      });
+
+      const search = document.getElementById("ecoclick-search");
+      const filter = document.getElementById("ecoclick-filter");
+      const info = document.getElementById("ecoclick-info");
+      const closeInfo = document.getElementById("ecoclick-close");
+
+      const fields = {
+        name: document.getElementById("ecoclick-info-name"),
+        neighborhood: document.getElementById("ecoclick-info-neighborhood"),
+        address: document.getElementById("ecoclick-info-address"),
+        hours: document.getElementById("ecoclick-info-hours"),
+        types: document.getElementById("ecoclick-info-types"),
+        service: document.getElementById("ecoclick-info-service")
+      };
+
+      function abrirInfo(ponto) {
+        fields.name.textContent = ponto.nome;
+        fields.neighborhood.textContent = ponto.bairro;
+        fields.address.textContent = ponto.endereco;
+        fields.hours.textContent = ponto.horario;
+        fields.types.textContent = ponto.tipos;
+        fields.service.textContent = ponto.servico;
+
+        info.classList.add("is-open");
+        info.setAttribute("aria-hidden", "false");
+      }
+
+      function fecharInfo() {
+        info.classList.remove("is-open");
+        info.setAttribute("aria-hidden", "true");
+      }
+
+      closeInfo.addEventListener("click", fecharInfo);
+
+      function renderizarPontos(lista) {
+        markerLayer.clearLayers();
+        markersById.clear();
+
+        lista.forEach((ponto) => {
+          const marker = L.marker([ponto.lat, ponto.lng], { icon: markerIcon });
+
+          marker.on("click", () => {
+            abrirInfo(ponto);
+            map.panTo([ponto.lat, ponto.lng], { animate: true });
+          });
+
+          marker.bindTooltip(ponto.nome, {
+            direction: "top",
+            offset: [0, -28]
+          });
+
+          marker.addTo(markerLayer);
+          markersById.set(ponto.id, marker);
+        });
+
+        if (lista.length) {
+          const bounds = L.latLngBounds(lista.map((p) => [p.lat, p.lng]));
+          map.fitBounds(bounds.pad(0.18), { maxZoom: 13, animate: true });
+        }
+      }
+
+      function aplicarFiltrosLocais() {
+        const termo = normalizarTexto(search.value);
+        const categoria = filter.value;
+
+        return pontos.filter((ponto) => {
+          const texto =
+            normalizarTexto(ponto.nome) + " " +
+            normalizarTexto(ponto.bairro);
+
+          const bateBusca = !termo || texto.includes(termo);
+          const bateCategoria =
+            categoria === "todos" || ponto.categoria === categoria;
+
+          return bateBusca && bateCategoria;
+        });
+      }
+
+      function procurarBairroLocal(termo) {
+        const chave = normalizarTexto(termo);
+
+        if (bairrosSalvador[chave]) {
+          return {
+            lat: bairrosSalvador[chave][0],
+            lng: bairrosSalvador[chave][1],
+            nome: termo
+          };
+        }
+
+        const encontrado = Object.keys(bairrosSalvador).find(
+          (bairro) => bairro.includes(chave) || chave.includes(bairro)
+        );
+
+        if (encontrado) {
+          return {
+            lat: bairrosSalvador[encontrado][0],
+            lng: bairrosSalvador[encontrado][1],
+            nome: encontrado
+          };
+        }
+
+        return null;
+      }
+
+      async function geocodificarBairro(termo) {
+        /*
+         * O Nominatim é usado somente quando o bairro não está na lista local.
+         * Em produção, o ideal é fazer esta consulta pelo backend do EcoClick
+         * para respeitar limites de uso e centralizar o serviço de geocodificação.
+         */
+        try {
+          const url =
+            "https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&country=Brazil&city=Salvador&state=Bahia&q=" +
+            encodeURIComponent(termo + ", Salvador, Bahia");
+
+          const resposta = await fetch(url, {
+            headers: { "Accept": "application/json" }
+          });
+
+          if (!resposta.ok) return null;
+
+          const resultados = await resposta.json();
+          if (!Array.isArray(resultados) || !resultados.length) return null;
+
+          const lat = Number(resultados[0].lat);
+          const lng = Number(resultados[0].lon);
+
+          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+          return { lat, lng, nome: termo };
+        } catch {
+          return null;
+        }
+      }
+
+      let buscaSequencia = 0;
+
+      async function filtrarPontos() {
+        const termoOriginal = search.value.trim();
+        const termo = normalizarTexto(termoOriginal);
+        const categoria = filter.value;
+
+        if (!termo) {
+          limparStatus();
+          renderizarPontos(
+            categoria === "todos"
+              ? pontos
+              : pontos.filter((p) => p.categoria === categoria)
+          );
+          return;
+        }
+
+        /*
+         * Primeiro tentamos uma busca direta nos pontos.
+         * Assim, "Boca do Rio", por exemplo, mostra o ponto daquele bairro.
+         */
+        const diretos = aplicarFiltrosLocais();
+
+        if (diretos.length) {
+          limparStatus();
+          renderizarPontos(diretos);
+          return;
+        }
+
+        /*
+         * Se não existe ponto no bairro pesquisado, procuramos o bairro
+         * e calculamos o centro mais próximo.
+         */
+        const sequenciaAtual = ++buscaSequencia;
+        let local = procurarBairroLocal(termoOriginal);
+
+        if (!local) {
+          mostrarStatus("Procurando o bairro para encontrar o ponto de coleta mais próximo...");
+          local = await geocodificarBairro(termoOriginal);
+          if (sequenciaAtual !== buscaSequencia) return;
+        }
+
+        if (!local) {
+          markerLayer.clearLayers();
+          markersById.clear();
+          mostrarStatus("Não encontrei esse bairro em Salvador. Tente escrever o nome completo.");
+          return;
+        }
+
+        const candidatos = categoria === "todos"
+          ? pontos
+          : pontos.filter((p) => p.categoria === categoria);
+
+        const maisProximo = pontoMaisProximo(local.lat, local.lng, candidatos);
+
+        if (!maisProximo) {
+          markerLayer.clearLayers();
+          markersById.clear();
+          mostrarStatus("Não há pontos cadastrados nessa categoria ainda.");
+          return;
+        }
+
+        renderizarPontos([maisProximo.ponto]);
+
+        const distancia = maisProximo.distancia;
+        const distanciaTexto = distancia < 1
+          ? `${Math.round(distancia * 1000)} m`
+          : `${distancia.toFixed(1).replace(".", ",")} km`;
+
+        mostrarStatus(
+          `Não há um ponto cadastrado em ${termoOriginal}. Mostrando o ponto mais próximo: ${maisProximo.ponto.nome} — aproximadamente ${distanciaTexto}.`
+        );
+
+        /*
+         * Abre automaticamente o cartão do resultado do fallback.
+         * Assim o usuário não precisa descobrir sozinho qual marcador foi escolhido.
+         */
+        abrirInfo(maisProximo.ponto);
+      }
+
+      let buscaTimer = null;
+
+      search.addEventListener("input", () => {
+        window.clearTimeout(buscaTimer);
+        buscaTimer = window.setTimeout(filtrarPontos, 420);
+      });
+
+      filter.addEventListener("change", filtrarPontos);
+
+      filtrarPontos();
+    })();
+  </script>
+</body>
+</html>
